@@ -94,7 +94,7 @@ void move_particle(particle_t *p, double step) {
 void all_move_particles(double step) {
     /* First calculate force for particles. */
     int i;
-#pragma omp parallel for default(none) shared(particles, nparticles)
+    #pragma omp parallel for default(none) shared(particles, nparticles)
     for (i = 0; i < nparticles; i++) {
         int j;
         particles[i].x_force = 0;
@@ -170,7 +170,13 @@ int main(int argc, char **argv) {
     }
 
     omp_set_num_threads(OMP_NUM_THREADS);
-    printf("%d\n", OMP_NUM_THREADS);
+    int total_threads;
+    #pragma omp parallel default(none) shared(total_threads)
+    {
+        total_threads = omp_get_num_threads();
+    }
+    printf("nb de threads total : %d\n", total_threads);
+
 
     init();
 
