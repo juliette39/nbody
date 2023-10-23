@@ -7,7 +7,7 @@ FILEPATH = os.path.dirname(os.path.abspath(__file__))
 max_cpu = os.cpu_count()
 data = []
 
-nb_particles = 2000
+nb_particles = 1000
 T_FINAL = 3
 
 for i in range(1, max_cpu + 1):
@@ -16,7 +16,7 @@ for i in range(1, max_cpu + 1):
     else:
         print(f'Calculate for {i} core')
 
-    result = subprocess.run([f'{FILEPATH}/nbody_brute_force', nb_particles, T_FINAL, i], stdout=subprocess.PIPE,
+    result = subprocess.run([f'{FILEPATH}/nbody_brute_force', str(nb_particles), str(T_FINAL), str(i)], stdout=subprocess.PIPE,
                             stderr=subprocess.PIPE)
     output = result.stdout.decode('utf-8')
     print(output)
@@ -28,6 +28,7 @@ for i in range(1, max_cpu + 1):
         time_taken = parts[2]
         time_taken = float(time_taken)
         data.append(time_taken)
+
 
 x = list(range(1, max_cpu + 1))
 
