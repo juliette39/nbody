@@ -3,4 +3,5 @@
 *.o
 *nbody_brute_force
 *nbody_barnes_hut
+venv
 *Makefile
