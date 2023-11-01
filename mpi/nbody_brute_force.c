@@ -89,21 +89,18 @@ void move_particle(particle_t *p, double step) {
 void all_move_particles(double step) {
     /* First calculate force for particles. */
     int i;
+
+    MPI_Init(NULL, NULL);
+    int rank, size;
+    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+    MPI_Comm_size(MPI_COMM_WORLD, &size);
+
+    int elements_per_process = nparticles / size;
+
     for (i = 0; i < nparticles; i++) {
         int j;
         particles[i].x_force = 0;
         particles[i].y_force = 0;
-
-        MPI_Init(NULL, NULL);
-        int rank, size;
-        MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-        MPI_Comm_size(MPI_COMM_WORLD, &size);
-
-        MPI_Datatype particle_type;
-        MPI_Type_contiguous(2, MPI_DOUBLE, &particle_type);
-        MPI_Type_commit(&particle_type);
-
-        int elements_per_process = nparticles / size;
 
         for (j = nparticles * rank / size; i < nparticles * (rank + 1) / size; i++) {
             particle_t *p = &particles[j];
@@ -113,20 +110,28 @@ void all_move_particles(double step) {
 
         if (rank == 0) {
             int t;
-            for(t = 1; t < size; t++) {
+            for(t = 2; t < size*2; t++) {
                 MPI_Status status;
-                particle_t s;
-                MPI_Recv(&s, 1, particle_type, MPI_ANY_SOURCE, MPI_ANY_TAG, MPI_COMM_WORLD, &status);
-                particles[i].x_force += s.x_force;
-                particles[i].y_force +=  s.y_force;
+                double force;
+                MPI_Recv(&force, 1, MPI_DOUBLE, MPI_ANY_SOURCE, MPI_ANY_TAG, MPI_COMM_WORLD, &status);
+
+                // Vérifiez le tag reçu et agissez en conséquence
+                if (status.MPI_TAG%2 == 0) {
+                    // traitez la force x
+                    particles[i].x_force += force;
+                }
+                else {
+                    // traitez la force y
+                    particles[i].y_force += force;
+                }
             }
         }
         else {
-            MPI_Send(&particles[i], 1, particle_type, 0, rank, MPI_COMM_WORLD);
+            MPI_Send(&particles[i].x_force, 1, MPI_DOUBLE, 0, rank*2, MPI_COMM_WORLD);
+            MPI_Send(&particles[i].y_force, 1, MPI_DOUBLE, 0, rank*2+1, MPI_COMM_WORLD);
         }
-
-        MPI_Finalize();
     }
+    MPI_Finalize();
 
     /* then move all particles and return statistics */
     for (i = 0; i < nparticles; i++) {
