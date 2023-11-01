@@ -102,7 +102,7 @@ void all_move_particles(double step) {
         particles[i].x_force = 0;
         particles[i].y_force = 0;
 
-        for (j = nparticles * rank / size; i < nparticles * (rank + 1) / size; i++) {
+        for (j = nparticles * rank / size; j < nparticles * (rank + 1) / size; j++) {
             particle_t *p = &particles[j];
             /* compute the force of particle j on particle i */
             compute_force(&particles[i], p->x_pos, p->y_pos, p->mass);
@@ -110,18 +110,25 @@ void all_move_particles(double step) {
 
         if (rank == 0) {
             int t;
-            for(t = 2; t < size*2; t++) {
+            for(t = 1; t < size; t++) {
                 MPI_Status status;
                 double force;
                 MPI_Recv(&force, 1, MPI_DOUBLE, MPI_ANY_SOURCE, MPI_ANY_TAG, MPI_COMM_WORLD, &status);
 
                 // Vérifiez le tag reçu et agissez en conséquence
                 if (status.MPI_TAG%2 == 0) {
-                    // traitez la force x
                     particles[i].x_force += force;
                 }
                 else {
-                    // traitez la force y
+                    particles[i].y_force += force;
+                }
+
+                MPI_Recv(&force, 1, MPI_DOUBLE, MPI_ANY_SOURCE, MPI_ANY_TAG, MPI_COMM_WORLD, &status);
+                // Vérifiez le tag reçu et agissez en conséquence
+                if (status.MPI_TAG%2 == 0) {
+                    particles[i].x_force += force;
+                }
+                else {
                     particles[i].y_force += force;
                 }
             }
