@@ -87,36 +87,39 @@ void move_particle(particle_t *p, double step) {
   Return local computations.
 */
 void all_move_particles(double step) {
-    /* First calculate force for particles. */
     int i;
+    for (i = 0; i < nparticles; i++) {
+        particles[i].x_force = 0;
+        particles[i].y_force = 0;
+    }
 
     int rank, size;
-
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
     MPI_Comm_size(MPI_COMM_WORLD, &size);
 
     int elements_per_process = nparticles / size;
+    int start_index = elements_per_process * rank;
+    int end_index = start_index + elements_per_process;
 
-    // Calculer les forces pour les particules dans la plage d'indices
-    for (int i = nparticles * rank / size; i < nparticles * (rank + 1) / size; i++) {
-        if (i < nparticles) {
-            particle_t* p = &particles[i];
-            p->x_force = 0;
-            p->y_force = 0;
-            for (int j = 0; j < nparticles; j++) {
-                particle_t* p_j = &particles[j];
-                compute_force(p, p_j->x_pos, p_j->y_pos, p_j->mass);
+    for (i = start_index; i < end_index; i++) {
+        for (int j = 0; j < nparticles; j++) {
+            if (j != i) {
+                particle_t *p = &particles[j];
+                /* compute the force of particle j on particle i */
+                compute_force(&particles[i], p->x_pos, p->y_pos, p->mass);
             }
         }
     }
 
-    MPI_Gather(particles, elements_per_process, MPI_DOUBLE, particles, elements_per_process, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+    // Use MPI_Allreduce to sum forces for all particles
+    MPI_Allreduce(MPI_IN_PLACE, particles, nparticles * sizeof(particle_t), MPI_BYTE, MPI_SUM, MPI_COMM_WORLD);
 
-    if (rank == 0) {
-        /* then move all particles and return statistics */
-        for (i = 0; i < nparticles; i++) {
-            move_particle(&particles[i], step);
-        }
+
+    MPI_Finalize();
+
+    /* then move all particles and return statistics */
+    for (i = 0; i < nparticles; i++) {
+        move_particle(&particles[i], step);
     }
 }
 
@@ -140,6 +143,7 @@ void print_all_particles(FILE *f) {
 
 void run_simulation() {
     double t = 0.0, dt = 0.01;
+
     while (t < T_FINAL && nparticles > 0) {
         /* Update time. */
         t += dt;
@@ -187,10 +191,8 @@ int main(int argc, char **argv) {
     struct timeval t1, t2;
     gettimeofday(&t1, NULL);
 
-    MPI_Init(&argc, &argv);
     /* Main thread starts simulation ... */
     run_simulation();
-    MPI_Finalize();
 
     gettimeofday(&t2, NULL);
 
