@@ -107,34 +107,27 @@ void all_move_particles(double step) {
             compute_force(&particles[i], p->x_pos, p->y_pos, p->mass);
         }
 
+        MPI_Send(&local_x_force, 1, MPI_DOUBLE, 0, 0, MPI_COMM_WORLD);
+        MPI_Send(&local_y_force, 1, MPI_DOUBLE, 0, 1, MPI_COMM_WORLD);
+
         if (rank == 0) {
-            int t;
-            for(t = 1; t < size; t++) {
+            // Variables pour stocker la somme totale des forces x et y
+            double total_x_force = 0.0;
+            double total_y_force = 0.0;
+
+            for (int t = 1; t < size; t++) {
                 MPI_Status status;
                 double force;
-                MPI_Recv(&force, 1, MPI_DOUBLE, MPI_ANY_SOURCE, MPI_ANY_TAG, MPI_COMM_WORLD, &status);
 
-                // Vérifiez le tag reçu et agissez en conséquence
-                if (status.MPI_TAG%2 == 0) {
-                    particles[i].x_force += force;
-                }
-                else {
-                    particles[i].y_force += force;
-                }
+                // Recevez la force x
+                MPI_Recv(&force, 1, MPI_DOUBLE, t, 0, MPI_COMM_WORLD, &status);
+                particles[i].x_force += force;
 
-                MPI_Recv(&force, 1, MPI_DOUBLE, MPI_ANY_SOURCE, MPI_ANY_TAG, MPI_COMM_WORLD, &status);
-                // Vérifiez le tag reçu et agissez en conséquence
-                if (status.MPI_TAG%2 == 0) {
-                    particles[i].x_force += force;
-                }
-                else {
-                    particles[i].y_force += force;
-                }
+                // Recevez la force y
+                MPI_Recv(&force, 1, MPI_DOUBLE, t, 1, MPI_COMM_WORLD, &status);
+                particles[i].y_force += force;
             }
-        }
-        else {
-            MPI_Send(&particles[i].x_force, 1, MPI_DOUBLE, 0, rank*2, MPI_COMM_WORLD);
-            MPI_Send(&particles[i].y_force, 1, MPI_DOUBLE, 0, rank*2+1, MPI_COMM_WORLD);
+
         }
     }
 
