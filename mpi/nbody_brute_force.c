@@ -94,12 +94,12 @@ void all_move_particles(double step) {
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
     MPI_Comm_size(MPI_COMM_WORLD, &size);
 
-    int elements_per_process = nparticles / size;
-
     for (i = 0; i < nparticles; i++) {
         int j;
         particles[i].x_force = 0;
         particles[i].y_force = 0;
+
+        printf("i: %d", i);
 
         for (j = nparticles * rank / size; j < nparticles * (rank + 1) / size; j++) {
             particle_t *p = &particles[j];
@@ -111,9 +111,6 @@ void all_move_particles(double step) {
         MPI_Send(&particles[i].y_force, 1, MPI_DOUBLE, 0, 1, MPI_COMM_WORLD);
 
         if (rank == 0) {
-            // Variables pour stocker la somme totale des forces x et y
-            double total_x_force = 0.0;
-            double total_y_force = 0.0;
 
             for (int t = 1; t < size; t++) {
                 MPI_Status status;
