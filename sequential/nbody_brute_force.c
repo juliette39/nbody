@@ -20,10 +20,6 @@
 #include "nbody.h"
 #include "nbody_tools.h"
 
-#ifdef _OPENMP
-#include <omp.h>
-#endif
-
 FILE *f_out = NULL;
 
 int nparticles = 10;      /* number of particles */
@@ -39,9 +35,9 @@ void init() {
 }
 
 #ifdef DISPLAY
-extern Display *theDisplay;  /* These three variables are required to open the */
-extern GC theGC;             /* particle plotting window.  They are externally */
-extern Window theMain;       /* declared in ui.h but are also required here.   */
+Display *theDisplay;  /* These three variables are required to open the */
+GC theGC;             /* particle plotting window.  They are externally */
+Window theMain;       /* declared in ui.h but are also required here.   */
 #endif
 
 /* compute the force that a particle with position (x_pos, y_pos) and mass 'mass'
@@ -52,15 +48,13 @@ void compute_force(particle_t *p, double x_pos, double y_pos, double mass) {
 
     x_sep = x_pos - p->x_pos;
     y_sep = y_pos - p->y_pos;
-
     dist_sq = MAX((x_sep * x_sep) + (y_sep * y_sep), 0.01);
 
     /* Use the 2-dimensional gravity rule: F = d * (GMm/d^2) */
     grav_base = GRAV_CONSTANT * (p->mass) * (mass) / dist_sq;
+
     p->x_force += grav_base * x_sep;
     p->y_force += grav_base * y_sep;
-
-
 }
 
 /* compute the new position/velocity */
@@ -94,12 +88,10 @@ void move_particle(particle_t *p, double step) {
 void all_move_particles(double step) {
     /* First calculate force for particles. */
     int i;
-    #pragma omp parallel for default(none) shared(particles, nparticles)
     for (i = 0; i < nparticles; i++) {
         int j;
         particles[i].x_force = 0;
         particles[i].y_force = 0;
-
         for (j = 0; j < nparticles; j++) {
             particle_t *p = &particles[j];
             /* compute the force of particle j on particle i */
@@ -158,25 +150,12 @@ void run_simulation() {
   Simulate the movement of nparticles particles.
 */
 int main(int argc, char **argv) {
-    int OMP_NUM_THREADS = 1;
     if (argc >= 2) {
         nparticles = atoi(argv[1]);
     }
-    if (argc >= 3) {
+    if (argc == 3) {
         T_FINAL = atof(argv[2]);
     }
-    if (argc == 4) {
-        OMP_NUM_THREADS = atof(argv[3]);
-    }
-
-    omp_set_num_threads(OMP_NUM_THREADS);
-    int total_threads;
-    #pragma omp parallel default(none) shared(total_threads)
-    {
-        total_threads = omp_get_num_threads();
-    }
-    printf("nb de threads total : %d\n", total_threads);
-
 
     init();
 

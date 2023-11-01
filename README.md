@@ -13,7 +13,7 @@ make
 
 ## MPI
 
-Run on differents machines
+Run on different machines
 
 1. Connect to the machine
     ```bash

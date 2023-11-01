@@ -1,5 +1,5 @@
 /*
-** nbody_barnes_hut.c - nbody simulation that implements the Barnes-Hut algorithm (O(nlog(n)))
+** nbody_brute_force.c - nbody simulation using the brute-force algorithm (O(n*n))
 **
 **/
 
@@ -10,6 +10,7 @@
 #include <sys/time.h>
 #include <assert.h>
 #include <unistd.h>
+#include <mpi.h>
 
 #ifdef DISPLAY
 #include <X11/Xlib.h>
@@ -24,20 +25,14 @@ FILE *f_out = NULL;
 
 int nparticles = 10;      /* number of particles */
 float T_FINAL = 1.0;     /* simulation end time */
-
 particle_t *particles;
-
-node_t *root;
-
 
 double sum_speed_sq = 0;
 double max_acc = 0;
 double max_speed = 0;
 
 void init() {
-    init_alloc(8 * nparticles);
-    root = malloc(sizeof(node_t));
-    init_node(root, NULL, XMIN, XMAX, YMIN, YMAX);
+    /* Nothing to do */
 }
 
 #ifdef DISPLAY
@@ -63,82 +58,9 @@ void compute_force(particle_t *p, double x_pos, double y_pos, double mass) {
     p->y_force += grav_base * y_sep;
 }
 
-/* compute the force that node n acts on particle p */
-void compute_force_on_particle(node_t *n, particle_t *p) {
-    if (!n || n->n_particles == 0) {
-        return;
-    }
-    if (n->particle) {
-        /* only one particle */
-        assert(n->children == NULL);
-
-        /*
-          If the current node is an external node (and it is not body b),
-          calculate the force exerted by the current node on b, and add
-          this amount to b's net force.
-        */
-        compute_force(p, n->x_center, n->y_center, n->mass);
-    } else {
-        /* There are multiple particles */
-
-#define THRESHOLD 2
-        double size = n->x_max - n->x_min; // width of n
-        double diff_x = n->x_center - p->x_pos;
-        double diff_y = n->y_center - p->y_pos;
-        double distance = sqrt(diff_x * diff_x + diff_y * diff_y);
-
-#if BRUTE_FORCE
-        /*
-          Run the procedure recursively on each of the current
-          node's children.
-          --> This result in a brute-force computation (complexity: O(n*n))
-        */
-        int i;
-        for(i=0; i<4; i++) {
-          compute_force_on_particle(&n->children[i], p);
-        }
-#else
-        /* Use the Barnes-Hut algorithm to get an approximation */
-        if (size / distance < THRESHOLD) {
-            /*
-          The particle is far away. Use an approximation of the force
-            */
-            compute_force(p, n->x_center, n->y_center, n->mass);
-        } else {
-            /*
-              Otherwise, run the procedure recursively on each of the current
-          node's children.
-            */
-            int i;
-            for (i = 0; i < 4; i++) {
-                compute_force_on_particle(&n->children[i], p);
-            }
-        }
-#endif
-    }
-}
-
-void compute_force_in_node(node_t *n) {
-    if (!n) return;
-
-    if (n->particle) {
-        particle_t *p = n->particle;
-        p->x_force = 0;
-        p->y_force = 0;
-        compute_force_on_particle(root, p);
-    }
-    if (n->children) {
-        int i;
-        for (i = 0; i < 4; i++) {
-            compute_force_in_node(&n->children[i]);
-        }
-    }
-}
-
 /* compute the new position/velocity */
-void move_particle(particle_t *p, double step, node_t *new_root) {
+void move_particle(particle_t *p, double step) {
 
-    assert(p->node != NULL);
     p->x_pos += (p->x_vel) * step;
     p->y_pos += (p->y_vel) * step;
     double x_acc = p->x_force / p->mass;
@@ -155,33 +77,8 @@ void move_particle(particle_t *p, double step, node_t *new_root) {
     sum_speed_sq += speed_sq;
     max_acc = MAX(max_acc, cur_acc);
     max_speed = MAX(max_speed, cur_speed);
-
-    p->node = NULL;
-    if (p->x_pos < new_root->x_min ||
-        p->x_pos > new_root->x_max ||
-        p->y_pos < new_root->y_min ||
-        p->y_pos > new_root->y_max) {
-        nparticles--;
-    } else {
-        insert_particle(p, new_root);
-    }
 }
 
-/* compute the new position of the particles in a node */
-void move_particles_in_node(node_t *n, double step, node_t *new_root) {
-    if (!n) return;
-
-    if (n->particle) {
-        particle_t *p = n->particle;
-        move_particle(p, step, new_root);
-    }
-    if (n->children) {
-        int i;
-        for (i = 0; i < 4; i++) {
-            move_particles_in_node(&n->children[i], step, new_root);
-        }
-    }
-}
 
 /*
   Move particles one time step.
@@ -191,21 +88,60 @@ void move_particles_in_node(node_t *n, double step, node_t *new_root) {
 */
 void all_move_particles(double step) {
     /* First calculate force for particles. */
-    compute_force_in_node(root);
+    int i;
+    MPI_Init(&argc, &argv);
 
-    node_t *new_root = alloc_node();
-    init_node(new_root, NULL, XMIN, XMAX, YMIN, YMAX);
+    int rank, size;
 
-    /* then move all particles and return statistics */
-    move_particles_in_node(root, step, new_root);
+    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+    MPI_Comm_size(MPI_COMM_WORLD, &size);
 
-    free_node(root);
-    root = new_root;
+    int elements_per_process = nparticles / size;
+
+    // Calculer les forces pour les particules dans la plage d'indices
+    for (int i = nparticles * rank / size; i < nparticles * (rank + 1) / size; i++) {
+        if (i < nparticles) {
+            particle_t* p = &particles[i];
+            p->x_force = 0;
+            p->y_force = 0;
+            for (int j = 0; j < nparticles; j++) {
+                particle_t* p_j = &particles[j];
+                compute_force(p, p_j->x_pos, p_j->y_pos, p_j->mass);
+            }
+        }
+    }
+
+    MPI_Gather(particles, elements_per_process, MPI_DOUBLE, particles, elements_per_process, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+
+    if (rank == 0) {
+        /* then move all particles and return statistics */
+        for (i = 0; i < nparticles; i++) {
+            move_particle(&particles[i], step);
+        }
+    }
+    MPI_Finalize();
+}
+
+/* display all the particles */
+void draw_all_particles() {
+    int i;
+    for (i = 0; i < nparticles; i++) {
+        int x = POS_TO_SCREEN(particles[i].x_pos);
+        int y = POS_TO_SCREEN(particles[i].y_pos);
+        draw_point(x, y);
+    }
+}
+
+void print_all_particles(FILE *f) {
+    int i;
+    for (i = 0; i < nparticles; i++) {
+        particle_t *p = &particles[i];
+        fprintf(f, "particle={pos=(%f,%f), vel=(%f,%f)}\n", p->x_pos, p->y_pos, p->x_vel, p->y_vel);
+    }
 }
 
 void run_simulation() {
     double t = 0.0, dt = 0.01;
-
     while (t < T_FINAL && nparticles > 0) {
         /* Update time. */
         t += dt;
@@ -220,19 +156,10 @@ void run_simulation() {
 
         /* Plot the movement of the particle */
 #if DISPLAY
-        node_t *n = root;
         clear_display();
-        draw_node(n);
+        draw_all_particles();
         flush_display();
 #endif
-    }
-}
-
-/* create a quad-tree from an array of particles */
-void insert_all_particles(int nparticles, particle_t *particles, node_t *root) {
-    int i;
-    for (i = 0; i < nparticles; i++) {
-        insert_particle(&particles[i], root);
     }
 }
 
@@ -252,7 +179,6 @@ int main(int argc, char **argv) {
     /* Allocate global shared arrays for the particles data set. */
     particles = malloc(sizeof(particle_t) * nparticles);
     all_init_particles(nparticles, particles);
-    insert_all_particles(nparticles, particles, root);
 
     /* Initialize thread data structures */
 #ifdef DISPLAY
@@ -273,7 +199,7 @@ int main(int argc, char **argv) {
 #ifdef DUMP_RESULT
     FILE* f_out = fopen("particles.log", "w");
     assert(f_out);
-    print_particles(f_out, root);
+    print_all_particles(f_out);
     fclose(f_out);
 #endif
 
@@ -284,9 +210,8 @@ int main(int argc, char **argv) {
     printf("Simulation took %lf s to complete\n", duration);
 
 #ifdef DISPLAY
-    node_t *n = root;
     clear_display();
-    draw_node(n);
+    draw_all_particles();
     flush_display();
 
     printf("Hit return to close the window.");
@@ -295,6 +220,5 @@ int main(int argc, char **argv) {
     /* Close the X window used to display the particles */
     XCloseDisplay(theDisplay);
 #endif
-
     return 0;
 }
