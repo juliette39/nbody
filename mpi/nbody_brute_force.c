@@ -107,8 +107,8 @@ void all_move_particles(double step) {
             compute_force(&particles[i], p->x_pos, p->y_pos, p->mass);
         }
 
-        MPI_Send(&local_x_force, 1, MPI_DOUBLE, 0, 0, MPI_COMM_WORLD);
-        MPI_Send(&local_y_force, 1, MPI_DOUBLE, 0, 1, MPI_COMM_WORLD);
+        MPI_Send(&particles[i].x_force, 1, MPI_DOUBLE, 0, 0, MPI_COMM_WORLD);
+        MPI_Send(&particles[i].y_force, 1, MPI_DOUBLE, 0, 1, MPI_COMM_WORLD);
 
         if (rank == 0) {
             // Variables pour stocker la somme totale des forces x et y
