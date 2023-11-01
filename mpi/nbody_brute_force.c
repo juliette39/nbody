@@ -90,7 +90,6 @@ void all_move_particles(double step) {
     /* First calculate force for particles. */
     int i;
 
-    MPI_Init(NULL, NULL);
     int rank, size;
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
     MPI_Comm_size(MPI_COMM_WORLD, &size);
@@ -138,7 +137,6 @@ void all_move_particles(double step) {
             MPI_Send(&particles[i].y_force, 1, MPI_DOUBLE, 0, rank*2+1, MPI_COMM_WORLD);
         }
     }
-    MPI_Finalize();
 
     /* then move all particles and return statistics */
     for (i = 0; i < nparticles; i++) {
@@ -214,8 +212,10 @@ int main(int argc, char **argv) {
     struct timeval t1, t2;
     gettimeofday(&t1, NULL);
 
+    MPI_Init(&argc, &argv);
     /* Main thread starts simulation ... */
     run_simulation();
+    MPI_Finalize();
 
     gettimeofday(&t2, NULL);
 
