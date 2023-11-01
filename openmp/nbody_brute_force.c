@@ -10,7 +10,6 @@
 #include <sys/time.h>
 #include <assert.h>
 #include <unistd.h>
-#include <mpi.h>
 
 #ifdef DISPLAY
 #include <X11/Xlib.h>
@@ -20,6 +19,12 @@
 #include "ui.h"
 #include "nbody.h"
 #include "nbody_tools.h"
+
+#ifdef _OPENMP
+
+#include <omp.h>
+
+#endif
 
 FILE *f_out = NULL;
 
@@ -36,9 +41,9 @@ void init() {
 }
 
 #ifdef DISPLAY
-Display *theDisplay;  /* These three variables are required to open the */
-GC theGC;             /* particle plotting window.  They are externally */
-Window theMain;       /* declared in ui.h but are also required here.   */
+extern Display *theDisplay;  /* These three variables are required to open the */
+extern GC theGC;             /* particle plotting window.  They are externally */
+extern Window theMain;       /* declared in ui.h but are also required here.   */
 #endif
 
 /* compute the force that a particle with position (x_pos, y_pos) and mass 'mass'
@@ -49,13 +54,15 @@ void compute_force(particle_t *p, double x_pos, double y_pos, double mass) {
 
     x_sep = x_pos - p->x_pos;
     y_sep = y_pos - p->y_pos;
+
     dist_sq = MAX((x_sep * x_sep) + (y_sep * y_sep), 0.01);
 
     /* Use the 2-dimensional gravity rule: F = d * (GMm/d^2) */
     grav_base = GRAV_CONSTANT * (p->mass) * (mass) / dist_sq;
-
     p->x_force += grav_base * x_sep;
     p->y_force += grav_base * y_sep;
+
+
 }
 
 /* compute the new position/velocity */
@@ -89,34 +96,22 @@ void move_particle(particle_t *p, double step) {
 void all_move_particles(double step) {
     /* First calculate force for particles. */
     int i;
+#pragma omp parallel for default(none) shared(particles, nparticles)
+    for (i = 0; i < nparticles; i++) {
+        int j;
+        particles[i].x_force = 0;
+        particles[i].y_force = 0;
 
-    int rank, size;
-
-    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-    MPI_Comm_size(MPI_COMM_WORLD, &size);
-
-    int elements_per_process = nparticles / size;
-
-    // Calculer les forces pour les particules dans la plage d'indices
-    for (int i = nparticles * rank / size; i < nparticles * (rank + 1) / size; i++) {
-        if (i < nparticles) {
-            particle_t* p = &particles[i];
-            p->x_force = 0;
-            p->y_force = 0;
-            for (int j = 0; j < nparticles; j++) {
-                particle_t* p_j = &particles[j];
-                compute_force(p, p_j->x_pos, p_j->y_pos, p_j->mass);
-            }
+        for (j = 0; j < nparticles; j++) {
+            particle_t *p = &particles[j];
+            /* compute the force of particle j on particle i */
+            compute_force(&particles[i], p->x_pos, p->y_pos, p->mass);
         }
     }
 
-    MPI_Gather(particles, elements_per_process, MPI_DOUBLE, particles, elements_per_process, MPI_DOUBLE, 0, MPI_COMM_WORLD);
-
-    if (rank == 0) {
-        /* then move all particles and return statistics */
-        for (i = 0; i < nparticles; i++) {
-            move_particle(&particles[i], step);
-        }
+    /* then move all particles and return statistics */
+    for (i = 0; i < nparticles; i++) {
+        move_particle(&particles[i], step);
     }
 }
 
@@ -165,12 +160,25 @@ void run_simulation() {
   Simulate the movement of nparticles particles.
 */
 int main(int argc, char **argv) {
+    int OMP_NUM_THREADS = 1;
     if (argc >= 2) {
         nparticles = atoi(argv[1]);
     }
-    if (argc == 3) {
+    if (argc >= 3) {
         T_FINAL = atof(argv[2]);
     }
+    if (argc == 4) {
+        OMP_NUM_THREADS = atof(argv[3]);
+    }
+
+    omp_set_num_threads(OMP_NUM_THREADS);
+    int total_threads;
+#pragma omp parallel default(none) shared(total_threads)
+    {
+        total_threads = omp_get_num_threads();
+    }
+    printf("nb de threads total : %d\n", total_threads);
+
 
     init();
 
@@ -187,10 +195,8 @@ int main(int argc, char **argv) {
     struct timeval t1, t2;
     gettimeofday(&t1, NULL);
 
-    MPI_Init(&argc, &argv);
     /* Main thread starts simulation ... */
     run_simulation();
-    MPI_Finalize();
 
     gettimeofday(&t2, NULL);
 
