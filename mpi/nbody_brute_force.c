@@ -94,8 +94,14 @@ void move_particle(particle_t *p, double step) {
   Update positions, velocity, and acceleration.
   Return local computations.
 */
-void all_move_particles(double step, int comm_rank, int comm_size) {
+void all_move_particles(double step) {
     /* First calculate force for particles. */
+
+    int comm_size;
+    int comm_rank;
+
+    MPI_Comm_size(MPI_COMM_WORLD, &comm_size);
+    MPI_Comm_rank(MPI_COMM_WORLD, &comm_rank);
 
     MPI_Datatype particle_type;
     MPI_Type_contiguous(sizeof(particle_t) / sizeof(double), MPI_DOUBLE, &particle_type);
@@ -116,39 +122,15 @@ void all_move_particles(double step, int comm_rank, int comm_size) {
         }
     }
 
-
     /* then move all particles and return statistics */
     for (i = (comm_rank/comm_size)*nparticles; i < nparticles/comm_size; i++) {
         move_particle(&particles[i], step);
     }
 
-    int start_idx = (int)floor((comm_rank * nparticles) / comm_size);
-    int end_idx = (int)floor(((comm_rank + 1) * nparticles) / comm_size);
-
-/* Create a temporary buffer for sending data */
-    particle_t* send_buffer = (particle_t*)malloc((end_idx - start_idx) * sizeof(particle_t));
-
-/* Copy the data you want to send into the send_buffer */
-    memcpy(send_buffer, particles + start_idx, (end_idx - start_idx) * sizeof(particle_t));
-
-    printf("start\n");
-/* Gather data from all processes and collect it on rank 0 */
-    MPI_GatherAlls(send_buffer, end_idx - start_idx, particle_type, particles, end_idx - start_idx, particle_type, 0, MPI_COMM_WORLD);
-    printf("end\n");
-
-
-/* Free the temporary send buffer */
-    free(send_buffer);
-
-/* Now, on rank 0, you have all the data gathered from other machines */
+    MPI_Bcast(particles, nparticles, particle_type, 0, MPI_COMM_WORLD);
 
 
     }
-
-    //Wait and send
-    
-    //We must synchronise particles because every process changed a part of particles
-}
 
 /* display all the particles */
 void draw_all_particles() {
@@ -168,13 +150,13 @@ void print_all_particles(FILE *f) {
     }
 }
 
-void run_simulation(int comm_rank, int comm_size) {
+void run_simulation() {
     double t = 0.0, dt = 0.01;
     while (t < T_FINAL && nparticles > 0) {
         /* Update time. */
         t += dt;
         /* Move particles with the current and compute rms velocity. */
-        all_move_particles(dt, comm_rank, comm_size);
+        all_move_particles(dt);
 
         /* Adjust dt based on maximum speed and acceleration--this
            simple rule tries to insure that no velocity will change
@@ -204,8 +186,6 @@ int main(int argc, char **argv) {
 
     MPI_Init(&argc, &argv);
 
-
-
     init();
 
     /* Allocate global shared arrays for the particles data set. */
@@ -221,16 +201,8 @@ int main(int argc, char **argv) {
     struct timeval t1, t2;
     gettimeofday(&t1, NULL);
 
-    int comm_size;
-    int comm_rank;
-
-    MPI_Comm_size(MPI_COMM_WORLD, &comm_size);
-    MPI_Comm_rank(MPI_COMM_WORLD, &comm_rank);
-    
-    printf("%d/%d is will treat particles from %d to %d\n", comm_rank, comm_size, (int)floor((comm_rank*nparticles)/comm_size), (int)floor(((comm_rank+1)*nparticles)/comm_size));
-
     /* Main thread starts simulation ... */
-    run_simulation(comm_rank, comm_size);
+    run_simulation();
 
     MPI_Finalize();
 
