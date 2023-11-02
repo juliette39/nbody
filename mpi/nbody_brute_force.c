@@ -31,6 +31,22 @@ double sum_speed_sq = 0;
 double max_acc = 0;
 double max_speed = 0;
 
+// Créez un type de données MPI pour 'particle_t'.
+MPI_Datatype MPI_PARTICLE_T;
+int blocklengths[6] = {1, 1, 1, 1, 1, 1}; // Nombre de répétitions pour chaque champ
+MPI_Aint displacements[6];
+MPI_Datatype types[6] = {MPI_DOUBLE, MPI_DOUBLE, MPI_DOUBLE, MPI_DOUBLE, MPI_DOUBLE, MPI_DOUBLE}; // Types de données dans 'particle_t'
+
+displacements[0] = offsetof(particle_t, x_pos); // Décalage du champ x_pos
+displacements[1] = offsetof(particle_t, y_pos); // Décalage du champ y_pos
+displacements[2] = offsetof(particle_t, x_vel); // Décalage du champ x_vel
+displacements[3] = offsetof(particle_t, y_vel); // Décalage du champ y_vel
+displacements[4] = offsetof(particle_t, x_force); // Décalage du champ x_force
+displacements[5] = offsetof(particle_t, y_force); // Décalage du champ y_force
+
+MPI_Type_create_struct(6, blocklengths, displacements, types, &MPI_PARTICLE_T);
+MPI_Type_commit(&MPI_PARTICLE_T);
+
 void init() {
     /* Nothing to do */
 }
@@ -112,18 +128,21 @@ void all_move_particles(double step) {
             compute_force(&particule_i, p->x_pos, p->y_pos, p->mass);
         }
 
-        MPI_Gather(&particule_i.x_force, 1, MPI_DOUBLE, NULL, 0, MPI_DATATYPE_NULL, 0, MPI_COMM_WORLD);
+        MPI_Gather(&particule_i, 1, MPI_PARTICLE_T, NULL, 0, MPI_DATATYPE_NULL, 0, MPI_COMM_WORLD);
 
         if (rank == 0) {
-            double* all_results = (double*)malloc(size * sizeof(double));
-            MPI_Gather(&particule_i.x_force, 1, MPI_DOUBLE, all_results, 1, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+            particle_t* all_particule_i = malloc(sizeof(particle_t) * nparticles_per_process);
+
+            MPI_Gather(&particule_i, 1, MPI_PARTICLE_T, all_particule_i, 1, MPI_PARTICLE_T, 0, MPI_COMM_WORLD);
 
             particles[i].x_force = 0;
+            particles[i].y_force = 0;
             for (int k = 0; k < size; k++) {
-                particles[i].x_force += all_results[i];
+                particles[i].x_force += all_particule_i[i].x_force;
+                particles[i].y_force += all_particule_i[i].y_force;
             }
 
-            free(all_results);
+            free(all_particule_i);
         }
     }
 
