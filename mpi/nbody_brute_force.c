@@ -93,6 +93,45 @@ void all_move_particles(double step) {
     int rank, size;
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
     MPI_Comm_size(MPI_COMM_WORLD, &size);
+    int nparticles_per_process = nparticles/size;
+
+    for (i = 0; i < nparticles; i++) {
+        printf("i: %d", i);
+
+        particle_t* local_particles = malloc(sizeof(particle_t) * nparticles_per_process);
+
+        MPI_Scatter(particles, nparticles_per_process, MPI_PARTICLE_T, local_particles, nparticles_per_process, MPI_PARTICLE_T, 0, MPI_COMM_WORLD);
+
+        particle_t particule_i;
+        particule_i.x_force = 0;
+        particule_i.y_force = 0;
+        int j;
+        for (j = 0; j < nparticles_per_process; j++) {
+            particle_t *p = &particles[j];
+            /* compute the force of particle j on particle i */
+            compute_force(&particule_i, p->x_pos, p->y_pos, p->mass);
+        }
+
+        MPI_Gather(&particule_i.x_force, 1, MPI_DOUBLE, NULL, 0, MPI_DATATYPE_NULL, 0, MPI_COMM_WORLD);
+
+        if (rank == 0) {
+            double* all_results = (double*)malloc(size * sizeof(double));
+            MPI_Gather(&particule_i.x_force, 1, MPI_DOUBLE, all_results, 1, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+
+            particles[i].x_force = 0;
+            for (int k = 0; i < size; i++) {
+                particles[i].x_force += all_results[i];
+            }
+
+            free(all_results);
+        }
+    }
+
+    /* then move all particles and return statistics */
+    for (i = 0; i < nparticles; i++) {
+        move_particle(&particles[i], step);
+    }
+
 
     for (i = 0; i < nparticles; i++) {
         int j;
@@ -116,11 +155,9 @@ void all_move_particles(double step) {
                 MPI_Status status;
                 double force;
 
-                // Recevez la force x
                 MPI_Recv(&force, 1, MPI_DOUBLE, t, 0, MPI_COMM_WORLD, &status);
                 particles[i].x_force += force;
 
-                // Recevez la force y
                 MPI_Recv(&force, 1, MPI_DOUBLE, t, 1, MPI_COMM_WORLD, &status);
                 particles[i].y_force += force;
             }
