@@ -11,6 +11,7 @@
 #include <assert.h>
 #include <unistd.h>
 #include <mpi.h>
+#include <string.h>
 
 #ifdef DISPLAY
 #include <X11/Xlib.h>
@@ -20,6 +21,12 @@
 #include "ui.h"
 #include "nbody.h"
 #include "nbody_tools.h"
+
+#ifdef _OPENMP
+
+#include <omp.h>
+
+#endif
 
 FILE *f_out = NULL;
 
@@ -32,13 +39,12 @@ double max_acc = 0;
 double max_speed = 0;
 
 void init() {
-    /* Nothing to do */
 }
 
 #ifdef DISPLAY
-Display *theDisplay;  /* These three variables are required to open the */
-GC theGC;             /* particle plotting window.  They are externally */
-Window theMain;       /* declared in ui.h but are also required here.   */
+extern Display *theDisplay;  /* These three variables are required to open the */
+extern GC theGC;             /* particle plotting window.  They are externally */
+extern Window theMain;       /* declared in ui.h but are also required here.   */
 #endif
 
 /* compute the force that a particle with position (x_pos, y_pos) and mass 'mass'
@@ -49,13 +55,15 @@ void compute_force(particle_t *p, double x_pos, double y_pos, double mass) {
 
     x_sep = x_pos - p->x_pos;
     y_sep = y_pos - p->y_pos;
+
     dist_sq = MAX((x_sep * x_sep) + (y_sep * y_sep), 0.01);
 
     /* Use the 2-dimensional gravity rule: F = d * (GMm/d^2) */
     grav_base = GRAV_CONSTANT * (p->mass) * (mass) / dist_sq;
-
     p->x_force += grav_base * x_sep;
     p->y_force += grav_base * y_sep;
+
+
 }
 
 /* compute the new position/velocity */
@@ -86,71 +94,60 @@ void move_particle(particle_t *p, double step) {
   Update positions, velocity, and acceleration.
   Return local computations.
 */
-void all_move_particles(double step) {
+void all_move_particles(double step, int comm_rank, int comm_size) {
     /* First calculate force for particles. */
+
+    MPI_Datatype particle_type;
+    MPI_Type_contiguous(sizeof(particle_t) / sizeof(double), MPI_DOUBLE, &particle_type);
+    MPI_Type_commit(&particle_type);
+
+    //MPI : while we calculate force we do not move particles we can separate work
     int i;
 
-    int rank, size;
-    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-    MPI_Comm_size(MPI_COMM_WORLD, &size);
-
-    MPI_Datatype MPI_PARTICLE_T;
-    int blocklengths[7] = {1, 1, 1, 1, 1, 1, 1}; // Nombre de répétitions pour chaque champ
-    MPI_Aint displacements[7];
-    MPI_Datatype types[7] = {MPI_DOUBLE, MPI_DOUBLE, MPI_DOUBLE, MPI_DOUBLE, MPI_DOUBLE, MPI_DOUBLE, MPI_DOUBLE}; // Types de données dans 'particle_t'
-
-    displacements[0] = offsetof(particle_t, x_pos);
-    displacements[1] = offsetof(particle_t, y_pos);
-    displacements[2] = offsetof(particle_t, x_vel);
-    displacements[3] = offsetof(particle_t, y_vel);
-    displacements[4] = offsetof(particle_t, x_force);
-    displacements[5] = offsetof(particle_t, y_force);
-    displacements[6] = offsetof(particle_t, mass);
-
-    // Créez le type MPI pour 'particle_t'.
-    MPI_Type_create_struct(7, blocklengths, displacements, types, &MPI_PARTICLE_T);
-    MPI_Type_commit(&MPI_PARTICLE_T);
-
-    int nparticles_per_process = nparticles/size;
-
-    for (i = 0; i < nparticles; i++) {
-
-        particle_t* local_particles = malloc(sizeof(particle_t) * nparticles_per_process);
-
-        MPI_Scatter(particles, nparticles_per_process, MPI_PARTICLE_T, local_particles, nparticles_per_process, MPI_PARTICLE_T, 0, MPI_COMM_WORLD);
-
-        particle_t particule_i;
-        particule_i.x_force = 0;
-        particule_i.y_force = 0;
+    for (i = (int)floor((comm_rank*nparticles)/comm_size); i < (int)floor(((comm_rank+1)*nparticles)/comm_size); i++) {
         int j;
-        for (j = 0; j < nparticles_per_process; j++) {
+        particles[i].x_force = 0;
+        particles[i].y_force = 0;
+
+        for (j = 0; j < nparticles; j++) {
             particle_t *p = &particles[j];
             /* compute the force of particle j on particle i */
-            compute_force(&particule_i, p->x_pos, p->y_pos, p->mass);
-        }
-
-        if (rank == 0) {
-            particle_t* all_particule_i = malloc(sizeof(particle_t) * nparticles_per_process);
-
-            MPI_Gather(&particule_i, 1, MPI_PARTICLE_T, all_particule_i, 1, MPI_PARTICLE_T, 0, MPI_COMM_WORLD);
-
-            particles[i].x_force = 0;
-            particles[i].y_force = 0;
-            for (int k = 0; k < size; k++) {
-                particles[i].x_force += all_particule_i[k].x_force;
-                particles[i].y_force += all_particule_i[k].y_force;
-            }
-
-        }
-        else {
-            MPI_Gather(&particule_i, 1, MPI_PARTICLE_T, NULL, 0, MPI_DATATYPE_NULL, 0, MPI_COMM_WORLD);
+            compute_force(&particles[i], p->x_pos, p->y_pos, p->mass);
         }
     }
+
 
     /* then move all particles and return statistics */
-    for (i = 0; i < nparticles; i++) {
+    for (i = (comm_rank/comm_size)*nparticles; i < nparticles/comm_size; i++) {
         move_particle(&particles[i], step);
     }
+
+    int start_idx = (int)floor((comm_rank * nparticles) / comm_size);
+    int end_idx = (int)floor(((comm_rank + 1) * nparticles) / comm_size);
+
+/* Create a temporary buffer for sending data */
+    particle_t* send_buffer = (particle_t*)malloc((end_idx - start_idx) * sizeof(particle_t));
+
+/* Copy the data you want to send into the send_buffer */
+    memcpy(send_buffer, particles + start_idx, (end_idx - start_idx) * sizeof(particle_t));
+
+    printf("start\n");
+/* Gather data from all processes and collect it on rank 0 */
+    MPI_GatherAlls(send_buffer, end_idx - start_idx, particle_type, particles, end_idx - start_idx, particle_type, 0, MPI_COMM_WORLD);
+    printf("end\n");
+
+
+/* Free the temporary send buffer */
+    free(send_buffer);
+
+/* Now, on rank 0, you have all the data gathered from other machines */
+
+
+    }
+
+    //Wait and send
+    
+    //We must synchronise particles because every process changed a part of particles
 }
 
 /* display all the particles */
@@ -171,14 +168,13 @@ void print_all_particles(FILE *f) {
     }
 }
 
-void run_simulation() {
+void run_simulation(int comm_rank, int comm_size) {
     double t = 0.0, dt = 0.01;
-
     while (t < T_FINAL && nparticles > 0) {
         /* Update time. */
         t += dt;
         /* Move particles with the current and compute rms velocity. */
-        all_move_particles(dt);
+        all_move_particles(dt, comm_rank, comm_size);
 
         /* Adjust dt based on maximum speed and acceleration--this
            simple rule tries to insure that no velocity will change
@@ -202,9 +198,13 @@ int main(int argc, char **argv) {
     if (argc >= 2) {
         nparticles = atoi(argv[1]);
     }
-    if (argc == 3) {
+    if (argc >= 3) {
         T_FINAL = atof(argv[2]);
     }
+
+    MPI_Init(&argc, &argv);
+
+
 
     init();
 
@@ -221,9 +221,17 @@ int main(int argc, char **argv) {
     struct timeval t1, t2;
     gettimeofday(&t1, NULL);
 
-    MPI_Init(&argc, &argv);
+    int comm_size;
+    int comm_rank;
+
+    MPI_Comm_size(MPI_COMM_WORLD, &comm_size);
+    MPI_Comm_rank(MPI_COMM_WORLD, &comm_rank);
+    
+    printf("%d/%d is will treat particles from %d to %d\n", comm_rank, comm_size, (int)floor((comm_rank*nparticles)/comm_size), (int)floor(((comm_rank+1)*nparticles)/comm_size));
+
     /* Main thread starts simulation ... */
-    run_simulation();
+    run_simulation(comm_rank, comm_size);
+
     MPI_Finalize();
 
     gettimeofday(&t2, NULL);
