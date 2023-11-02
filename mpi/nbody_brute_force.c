@@ -151,44 +151,6 @@ void all_move_particles(double step) {
     for (i = 0; i < nparticles; i++) {
         move_particle(&particles[i], step);
     }
-
-
-    for (i = 0; i < nparticles; i++) {
-        int j;
-        particles[i].x_force = 0;
-        particles[i].y_force = 0;
-
-        printf("i: %d", i);
-
-        for (j = nparticles * rank / size; j < nparticles * (rank + 1) / size; j++) {
-            particle_t *p = &particles[j];
-            /* compute the force of particle j on particle i */
-            compute_force(&particles[i], p->x_pos, p->y_pos, p->mass);
-        }
-
-        MPI_Send(&particles[i].x_force, 1, MPI_DOUBLE, 0, 0, MPI_COMM_WORLD);
-        MPI_Send(&particles[i].y_force, 1, MPI_DOUBLE, 0, 1, MPI_COMM_WORLD);
-
-        if (rank == 0) {
-
-            for (int t = 1; t < size; t++) {
-                MPI_Status status;
-                double force;
-
-                MPI_Recv(&force, 1, MPI_DOUBLE, t, 0, MPI_COMM_WORLD, &status);
-                particles[i].x_force += force;
-
-                MPI_Recv(&force, 1, MPI_DOUBLE, t, 1, MPI_COMM_WORLD, &status);
-                particles[i].y_force += force;
-            }
-
-        }
-    }
-
-    /* then move all particles and return statistics */
-    for (i = 0; i < nparticles; i++) {
-        move_particle(&particles[i], step);
-    }
 }
 
 /* display all the particles */
