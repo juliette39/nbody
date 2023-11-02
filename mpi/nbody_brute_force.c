@@ -119,7 +119,7 @@ void all_move_particles(double step) {
             MPI_Gather(&particule_i.x_force, 1, MPI_DOUBLE, all_results, 1, MPI_DOUBLE, 0, MPI_COMM_WORLD);
 
             particles[i].x_force = 0;
-            for (int k = 0; i < size; i++) {
+            for (int k = 0; k < size; k++) {
                 particles[i].x_force += all_results[i];
             }
 
