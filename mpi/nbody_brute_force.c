@@ -130,8 +130,6 @@ void all_move_particles(double step) {
             compute_force(&particule_i, p->x_pos, p->y_pos, p->mass);
         }
 
-        MPI_Gather(&particule_i, 1, MPI_PARTICLE_T, NULL, 0, MPI_DATATYPE_NULL, 0, MPI_COMM_WORLD);
-
         if (rank == 0) {
             particle_t* all_particule_i = malloc(sizeof(particle_t) * nparticles_per_process);
 
@@ -144,6 +142,9 @@ void all_move_particles(double step) {
                 particles[i].y_force += all_particule_i[i].y_force;
             }
 
+        }
+        else {
+            MPI_Gather(&particule_i, 1, MPI_PARTICLE_T, NULL, 0, MPI_DATATYPE_NULL, 0, MPI_COMM_WORLD);
         }
     }
 
