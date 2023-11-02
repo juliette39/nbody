@@ -137,8 +137,8 @@ void all_move_particles(double step) {
             particles[i].x_force = 0;
             particles[i].y_force = 0;
             for (int k = 0; k < size; k++) {
-                particles[i].x_force += all_particule_i[i].x_force;
-                particles[i].y_force += all_particule_i[i].y_force;
+                particles[i].x_force += all_particule_i[k].x_force;
+                particles[i].y_force += all_particule_i[k].y_force;
             }
 
         }
