@@ -114,7 +114,6 @@ void all_move_particles(double step) {
     int nparticles_per_process = nparticles/size;
 
     for (i = 0; i < nparticles; i++) {
-        printf("i: %d", i);
 
         particle_t* local_particles = malloc(sizeof(particle_t) * nparticles_per_process);
 
