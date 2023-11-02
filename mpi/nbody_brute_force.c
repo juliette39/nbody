@@ -31,22 +31,6 @@ double sum_speed_sq = 0;
 double max_acc = 0;
 double max_speed = 0;
 
-// Créez un type de données MPI pour 'particle_t'.
-MPI_Datatype MPI_PARTICLE_T;
-int blocklengths[6] = {1, 1, 1, 1, 1, 1}; // Nombre de répétitions pour chaque champ
-MPI_Aint displacements[6];
-MPI_Datatype types[6] = {MPI_DOUBLE, MPI_DOUBLE, MPI_DOUBLE, MPI_DOUBLE, MPI_DOUBLE, MPI_DOUBLE}; // Types de données dans 'particle_t'
-
-displacements[0] = offsetof(particle_t, x_pos); // Décalage du champ x_pos
-displacements[1] = offsetof(particle_t, y_pos); // Décalage du champ y_pos
-displacements[2] = offsetof(particle_t, x_vel); // Décalage du champ x_vel
-displacements[3] = offsetof(particle_t, y_vel); // Décalage du champ y_vel
-displacements[4] = offsetof(particle_t, x_force); // Décalage du champ x_force
-displacements[5] = offsetof(particle_t, y_force); // Décalage du champ y_force
-
-MPI_Type_create_struct(6, blocklengths, displacements, types, &MPI_PARTICLE_T);
-MPI_Type_commit(&MPI_PARTICLE_T);
-
 void init() {
     /* Nothing to do */
 }
@@ -109,6 +93,24 @@ void all_move_particles(double step) {
     int rank, size;
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
     MPI_Comm_size(MPI_COMM_WORLD, &size);
+
+    MPI_Datatype MPI_PARTICLE_T;
+    int blocklengths[7] = {1, 1, 1, 1, 1, 1, 1}; // Nombre de répétitions pour chaque champ
+    MPI_Aint displacements[7];
+    MPI_Datatype types[7] = {MPI_DOUBLE, MPI_DOUBLE, MPI_DOUBLE, MPI_DOUBLE, MPI_DOUBLE, MPI_DOUBLE, MPI_DOUBLE}; // Types de données dans 'particle_t'
+
+    displacements[0] = offsetof(particle_t, x_pos);
+    displacements[1] = offsetof(particle_t, y_pos);
+    displacements[2] = offsetof(particle_t, x_vel);
+    displacements[3] = offsetof(particle_t, y_vel);
+    displacements[4] = offsetof(particle_t, x_force);
+    displacements[5] = offsetof(particle_t, y_force);
+    displacements[6] = offsetof(particle_t, mass);
+
+    // Créez le type MPI pour 'particle_t'.
+    MPI_Type_create_struct(7, blocklengths, displacements, types, &MPI_PARTICLE_T);
+    MPI_Type_commit(&MPI_PARTICLE_T);
+
     int nparticles_per_process = nparticles/size;
 
     for (i = 0; i < nparticles; i++) {
@@ -142,7 +144,6 @@ void all_move_particles(double step) {
                 particles[i].y_force += all_particule_i[i].y_force;
             }
 
-            free(all_particule_i);
         }
     }
 
