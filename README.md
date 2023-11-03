@@ -38,3 +38,6 @@ Run on different machines
     ```
 
 ## CUDA
+```
+https://colab.research.google.com/drive/1OXNOQBkLIYI8RCZmmyzsYEgJJM78ik-Q?usp=sharing&fbclid=IwAR0KmpPjJk7ogdrR2y85BILEd5aCQXF5yQ0Bd9MmIYrsBFFcHEBPByCmREk#scrollTo=6-y1M5IF_EMC
+```
