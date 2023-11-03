@@ -94,43 +94,56 @@ void move_particle(particle_t *p, double step) {
   Update positions, velocity, and acceleration.
   Return local computations.
 */
-void all_move_particles(double step) {
+void all_move_particles(double step, int comm_size, int comm_rank, MPI_Datatype MPI_PARTICLE_T) {
     /* First calculate force for particles. */
 
-    int comm_size;
-    int comm_rank;
+    int nparticles_per_process = nparticles/comm_size;
 
-    MPI_Comm_size(MPI_COMM_WORLD, &comm_size);
-    MPI_Comm_rank(MPI_COMM_WORLD, &comm_rank);
+    particle_t* local_particles = malloc(sizeof(particle_t) * nparticles_per_process);
+    MPI_Scatter(particles, nparticles_per_process, MPI_PARTICLE_T, local_particles, nparticles_per_process, MPI_PARTICLE_T, 0, MPI_COMM_WORLD);
 
-    MPI_Datatype particle_type;
-    MPI_Type_contiguous(sizeof(particle_t) / sizeof(double), MPI_DOUBLE, &particle_type);
-    MPI_Type_commit(&particle_type);
-
-    //MPI : while we calculate force we do not move particles we can separate work
+    //MPI : while we calculate the force the particles aren't moving, work can be separated
     int i;
-
-    for (i = (int)floor((comm_rank*nparticles)/comm_size); i < (int)floor(((comm_rank+1)*nparticles)/comm_size); i++) {
+    for (i = 0; i < nparticles_per_process; i++) {
         int j;
-        particles[i].x_force = 0;
-        particles[i].y_force = 0;
+        local_particles[i].x_force = 0;
+        local_particles[i].y_force = 0;
 
         for (j = 0; j < nparticles; j++) {
             particle_t *p = &particles[j];
             /* compute the force of particle j on particle i */
-            compute_force(&particles[i], p->x_pos, p->y_pos, p->mass);
+            compute_force(&local_particles[i], p->x_pos, p->y_pos, p->mass);
         }
     }
 
-    /* then move all particles and return statistics */
-    for (i = (comm_rank/comm_size)*nparticles; i < nparticles/comm_size; i++) {
-        move_particle(&particles[i], step);
+    MPI_Gather(local_particles, nparticles_per_process, MPI_PARTICLE_T, particles, nparticles_per_process, MPI_PARTICLE_T, 0, MPI_COMM_WORLD);
+
+    if (comm_rank == 0) {
+        // calculate the remainder if nparticles cannot be divided by comm_size
+        int remainder = nparticles % comm_size;
+        for (i = nparticles-remainder; i < nparticles; i++) {
+            int j;
+            particles[i].x_force = 0;
+            particles[i].y_force = 0;
+
+            for (j = 0; j < nparticles; j++) {
+                particle_t *p = &particles[j];
+                /* compute the force of particle j on particle i */
+                compute_force(&particles[i], p->x_pos, p->y_pos, p->mass);
+            }
+        }
+
+        /* then move all particles and return statistics */
+        /* as statistics have to be calculated it cannot be seperated */
+        for (i = 0; i < nparticles; i++) {
+            move_particle(&particles[i], step);
+        }
     }
 
-    MPI_Bcast(particles, nparticles, particle_type, 0, MPI_COMM_WORLD);
+    MPI_Bcast(particles, nparticles, MPI_PARTICLE_T, 0, MPI_COMM_WORLD);
 
-
-    }
+    free(local_particles);
+}
 
 /* display all the particles */
 void draw_all_particles() {
@@ -150,18 +163,21 @@ void print_all_particles(FILE *f) {
     }
 }
 
-void run_simulation() {
+void run_simulation(int comm_size, int comm_rank, MPI_Datatype MPI_PARTICLE_T) {
     double t = 0.0, dt = 0.01;
     while (t < T_FINAL && nparticles > 0) {
         /* Update time. */
-        t += dt;
+        if (comm_rank == 0) {
+            t += dt;
+        }
+        MPI_Bcast(&t, 1, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+
         /* Move particles with the current and compute rms velocity. */
-        all_move_particles(dt);
+        all_move_particles(dt, comm_size, comm_rank, MPI_PARTICLE_T);
 
         /* Adjust dt based on maximum speed and acceleration--this
            simple rule tries to insure that no velocity will change
            by more than 10% */
-
         dt = 0.1 * max_speed / max_acc;
 
         /* Plot the movement of the particle */
@@ -172,6 +188,7 @@ void run_simulation() {
 #endif
     }
 }
+
 
 /*
   Simulate the movement of nparticles particles.
@@ -185,6 +202,16 @@ int main(int argc, char **argv) {
     }
 
     MPI_Init(&argc, &argv);
+
+    int comm_size;
+    int comm_rank;
+
+    MPI_Comm_size(MPI_COMM_WORLD, &comm_size);
+    MPI_Comm_rank(MPI_COMM_WORLD, &comm_rank);
+
+    MPI_Datatype MPI_PARTICLE_T;
+    MPI_Type_contiguous(sizeof(particle_t) / sizeof(double), MPI_DOUBLE, &MPI_PARTICLE_T);
+    MPI_Type_commit(&MPI_PARTICLE_T);
 
     init();
 
@@ -202,7 +229,7 @@ int main(int argc, char **argv) {
     gettimeofday(&t1, NULL);
 
     /* Main thread starts simulation ... */
-    run_simulation();
+    run_simulation(comm_size, comm_rank, MPI_PARTICLE_T);
 
     MPI_Finalize();
 
