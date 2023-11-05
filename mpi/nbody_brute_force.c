@@ -62,8 +62,6 @@ void compute_force(particle_t *p, double x_pos, double y_pos, double mass) {
     grav_base = GRAV_CONSTANT * (p->mass) * (mass) / dist_sq;
     p->x_force += grav_base * x_sep;
     p->y_force += grav_base * y_sep;
-
-
 }
 
 /* compute the new position/velocity */
@@ -231,8 +229,6 @@ int main(int argc, char **argv) {
     /* Main thread starts simulation ... */
     run_simulation(comm_size, comm_rank, MPI_PARTICLE_T);
 
-    MPI_Finalize();
-
     gettimeofday(&t2, NULL);
 
     double duration = (t2.tv_sec - t1.tv_sec) + ((t2.tv_usec - t1.tv_usec) / 1e6);
@@ -244,11 +240,18 @@ int main(int argc, char **argv) {
     fclose(f_out);
 #endif
 
-    printf("-----------------------------\n");
-    printf("nparticles: %d\n", nparticles);
-    printf("T_FINAL: %f\n", T_FINAL);
-    printf("-----------------------------\n");
-    printf("Simulation took %lf s to complete\n", duration);
+    double max_duration;
+    MPI_Reduce(&duration, &max_duration, 1, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
+
+    if (comm_rank == 0) {
+        printf("-----------------------------\n");
+        printf("nparticles: %d\n", nparticles);
+        printf("T_FINAL: %f\n", T_FINAL);
+        printf("-----------------------------\n");
+        printf("Simulation took %lf s to complete\n", max_duration);
+    }
+
+    MPI_Finalize();
 
 #ifdef DISPLAY
     clear_display();
