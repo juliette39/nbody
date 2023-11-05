@@ -85,7 +85,8 @@ def sequential_args(nb_particles, T_FINAL):
     return [f'{FILEPATH}/sequential/nbody_brute_force', str(nb_particles), str(T_FINAL)]
 
 
-def total():
+def bar_graph():
+    title = "NBody Force Brute accélération des 3 méthodes"
     values = [(1000, 2), (2000, 2), (1000, 5), (1000, 10), (5000, 1)]
 
     data_sequential = []
@@ -98,10 +99,10 @@ def total():
         nb_particles, T_FINAL = values[i]
         sequential_time = get_duration(sequential_args(nb_particles, T_FINAL))
 
-        data_sequential.append(sequential_time/sequential_time)
-        data_openmp.append(get_duration(openmp_args(nb_particles, T_FINAL, n))/sequential_time)
-        data_mpi.append(get_duration(mpi_args(nb_particles, T_FINAL, n))/sequential_time)
-        data_cuda[i] = data_cuda[i]/sequential_time
+        data_sequential.append((sequential_time/sequential_time) * 100)
+        data_openmp.append((get_duration(openmp_args(nb_particles, T_FINAL, n))/sequential_time) * 100)
+        data_mpi.append((get_duration(mpi_args(nb_particles, T_FINAL, n))/sequential_time) * 100)
+        data_cuda[i] = data_cuda[i]/sequential_time * 100
 
         legende.append(f"({nb_particles}, {T_FINAL})")
 
@@ -115,22 +116,94 @@ def total():
     plt.bar(indices, data_sequential, width=largeur_barre, label='Sequential', color='blue')
     plt.bar(indices + largeur_barre, data_openmp, width=largeur_barre, label='OpenMP', color='green')
     plt.bar(indices + 2 * largeur_barre, data_mpi, width=largeur_barre, label='MPI', color='red')
-    plt.bar(indices + 3 * largeur_barre, data_mpi, width=largeur_barre, label='CUDA', color='yellow')
+    plt.bar(indices + 3 * largeur_barre, data_cuda, width=largeur_barre, label='CUDA', color='orange')
 
     # Étiquetez les axes et ajoutez une légende
-    plt.xlabel('Arguments')
-    plt.ylabel('Temps')
-    plt.title("NBody Force Brute accélération 3 méthodes")
+    plt.xlabel('Paramètres')
+    plt.ylabel('Accélération (%)')
+    plt.title(title)
     plt.xticks(indices + largeur_barre, legende)
-    plt.legend()
+    plt.legend(loc='center left', bbox_to_anchor=(1, 0.5), fontsize='small')
+    plt.subplots_adjust(right=0.82)
 
     # Affichez le graphique
-    plt.savefig(f"{FILEPATH}/graph/NBody Force Brute accélération 3 méthodes.jpg")
-    plt.show()
+    plt.savefig(f"{FILEPATH}/graph/{title}.jpg")
+
+
+def evolution_t_graph(nb_particles):
+    title = f"NBody Force Brute les 3 méthodes avec n_particle = {nb_particles}"
+
+    data_sequential = []
+    data_openmp = []
+    data_mpi = []
+    data_cuda = [2.297745, 4.279224, 6.238240, 8.506100, 10.356476, 12.732869, 14.744954, 16.276171, 18.448729, 21.032212]
+    t_finals = range(1, 11)
+    n = 5
+    for t in t_finals:
+        T_FINAL = t
+        sequential_time = get_duration(sequential_args(nb_particles, T_FINAL))
+
+        data_sequential.append(sequential_time)
+        data_openmp.append(get_duration(openmp_args(nb_particles, T_FINAL, n)))
+        data_mpi.append(get_duration(mpi_args(nb_particles, T_FINAL, n)))
+        data_cuda[t-1] = data_cuda[t-1]
+
+    # Créez le graphique en barres
+    plt.scatter(t_finals, data_sequential, label='Sequential', color='blue')
+    plt.scatter(t_finals, data_openmp, label='OpenMP', color='green')
+    plt.scatter(t_finals, data_mpi, label='MPI', color='red')
+    plt.scatter(t_finals, data_cuda, label='CUDA', color='orange')
+
+    # Étiquetez les axes et ajoutez une légende
+    plt.xlabel('t')
+    plt.ylabel('Temps (s)')
+    plt.title(title)
+    plt.legend(loc='center left', bbox_to_anchor=(1, 0.5), fontsize='small')
+    plt.subplots_adjust(right=0.82)
+
+    # Affichez le graphique
+    plt.savefig(f"{FILEPATH}/graph/{title}.jpg")
+
+
+def evolution_nb_particles_graph(T_FINAL):
+    title = f"NBody Force Brute les 3 méthodes avec T_FINAL = {T_FINAL}"
+
+    data_sequential = []
+    data_openmp = []
+    data_mpi = []
+    data_cuda = [4.671451, 13.238847, 24.246035, 37.037894, 49.437910]
+    nb_particles_range = range(1000, 6000, 1000)
+    n = 5
+    for nb_particles in nb_particles_range:
+        sequential_time = get_duration(sequential_args(nb_particles, T_FINAL))
+        data_sequential.append(sequential_time)
+        data_openmp.append(get_duration(openmp_args(nb_particles, T_FINAL, n)))
+        data_mpi.append(get_duration(mpi_args(nb_particles, T_FINAL, n)))
+        data_cuda[(nb_particles//1000)-1] = data_cuda[(nb_particles//1000)-1]
+
+    # Créez le graphique en barres
+    plt.scatter(nb_particles_range, data_sequential, label='Sequential', color='blue')
+    plt.scatter(nb_particles_range, data_openmp, label='OpenMP', color='green')
+    plt.scatter(nb_particles_range, data_mpi, label='MPI', color='red')
+    plt.scatter(nb_particles_range, data_cuda, label='CUDA', color='orange')
+
+    # Étiquetez les axes et ajoutez une légende
+    plt.xlabel('nb_particles')
+    plt.ylabel('Temps (s)')
+    plt.title(title)
+    plt.legend(loc='center left', bbox_to_anchor=(1, 0.5), fontsize='small')
+    plt.subplots_adjust(right=0.82)
+
+    # Affichez le graphique
+    plt.savefig(f"{FILEPATH}/graph/{title}.jpg")
 
 
 n = 10
-number_particles = 1000
+number_particles = 5000
 time = 2
 
-total()
+mpi_graph(n, number_particles, time)
+openmp_graph(n, number_particles, time)
+evolution_t_graph(1000)
+evolution_nb_particles_graph(2)
+bar_graph()
