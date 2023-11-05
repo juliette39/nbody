@@ -39,25 +39,27 @@ def openmp_args(nb_particles, T_FINAL, i):
 
 def openmp_graph(n, nb_particles, T_FINAL):
     data = openmp(n, nb_particles, T_FINAL)
+    print(data)
     create_graph("OpenMP", data, nb_particles, T_FINAL)
 
 
-def mpi(n, nb_particles, T_FINAL):
+def mpi(n, openmp_n, nb_particles, T_FINAL):
     data = []
     for i in range(1, n + 1):
         print(f'Calculate for {i} different machines')
-        data.append(get_duration(mpi_args(nb_particles, T_FINAL, i)))
+        data.append(get_duration(mpi_args(nb_particles, T_FINAL, i, openmp_n)))
     return data
 
 
-def mpi_args(nb_particles, T_FINAL, i):
+def mpi_args(nb_particles, T_FINAL, i, openmp_n):
     return ['mpirun', '-np', str(i), '-hostfile', f'{FILEPATH}/mpi/hosts',
-            f'{FILEPATH}/mpi/nbody_brute_force', str(nb_particles), str(T_FINAL), str(i)]
+            f'{FILEPATH}/mpi/nbody_brute_force', str(nb_particles), str(T_FINAL), str(openmp_n)]
 
 
-def mpi_graph(n, nb_particles, T_FINAL):
-    data = mpi(n, nb_particles, T_FINAL)
-    create_graph("MPI", data, nb_particles, T_FINAL)
+def mpi_graph(n, openmp_n, nb_particles, T_FINAL):
+    data = mpi(n, openmp_n, nb_particles, T_FINAL)
+    print(data)
+    create_graph(f"MPI openMP: {openmp_n}", data, nb_particles, T_FINAL)
 
 
 def create_graph(algo, data, nb_particles, T_FINAL):
@@ -69,17 +71,16 @@ def create_graph(algo, data, nb_particles, T_FINAL):
 
     # Définissez les graduations personnalisées pour les axes x et y
     x_ticks = [i for i in range(1, n + 1)]
-
     # Utilisez xticks et yticks pour définir les graduations
     plt.xticks(x_ticks)
 
-    plt.xlabel('Nb de threads')
+    plt.xlabel('Nb de processus')
     plt.ylabel('Temps (s)')
     plt.title(f'NBody Force Brute {algo} {nb_particles} {T_FINAL}')
 
     # plt.autoscale(False)
     plt.savefig(f'{FILEPATH}/graph/NBody Force Brute {algo} {nb_particles} {T_FINAL}.jpg')
-
+    plt.clf()
 
 def sequential_args(nb_particles, T_FINAL):
     return [f'{FILEPATH}/sequential/nbody_brute_force', str(nb_particles), str(T_FINAL)]
@@ -101,7 +102,7 @@ def bar_graph():
 
         data_sequential.append((sequential_time/sequential_time) * 100)
         data_openmp.append((get_duration(openmp_args(nb_particles, T_FINAL, n))/sequential_time) * 100)
-        data_mpi.append((get_duration(mpi_args(nb_particles, T_FINAL, n))/sequential_time) * 100)
+        data_mpi.append((get_duration(mpi_args(nb_particles, T_FINAL, n, 20))/sequential_time) * 100)
         data_cuda[i] = data_cuda[i]/sequential_time * 100
 
         legende.append(f"({nb_particles}, {T_FINAL})")
@@ -122,12 +123,13 @@ def bar_graph():
     plt.xlabel('Paramètres')
     plt.ylabel('Accélération (%)')
     plt.title(title)
-    plt.xticks(indices + largeur_barre, legende)
+    plt.xticks(indices + largeur_barre*1.5, legende)
     plt.legend(loc='center left', bbox_to_anchor=(1, 0.5), fontsize='small')
     plt.subplots_adjust(right=0.82)
 
     # Affichez le graphique
     plt.savefig(f"{FILEPATH}/graph/{title}.jpg")
+    plt.clf()
 
 
 def evolution_t_graph(nb_particles):
@@ -145,7 +147,7 @@ def evolution_t_graph(nb_particles):
 
         data_sequential.append(sequential_time)
         data_openmp.append(get_duration(openmp_args(nb_particles, T_FINAL, n)))
-        data_mpi.append(get_duration(mpi_args(nb_particles, T_FINAL, n)))
+        data_mpi.append(get_duration(mpi_args(nb_particles, T_FINAL, n, 20)))
         data_cuda[t-1] = data_cuda[t-1]
 
     # Créez le graphique en barres
@@ -163,6 +165,7 @@ def evolution_t_graph(nb_particles):
 
     # Affichez le graphique
     plt.savefig(f"{FILEPATH}/graph/{title}.jpg")
+    plt.clf()
 
 
 def evolution_nb_particles_graph(T_FINAL):
@@ -178,7 +181,7 @@ def evolution_nb_particles_graph(T_FINAL):
         sequential_time = get_duration(sequential_args(nb_particles, T_FINAL))
         data_sequential.append(sequential_time)
         data_openmp.append(get_duration(openmp_args(nb_particles, T_FINAL, n)))
-        data_mpi.append(get_duration(mpi_args(nb_particles, T_FINAL, n)))
+        data_mpi.append(get_duration(mpi_args(nb_particles, T_FINAL, n, 20)))
         data_cuda[(nb_particles//1000)-1] = data_cuda[(nb_particles//1000)-1]
 
     # Créez le graphique en barres
@@ -196,14 +199,16 @@ def evolution_nb_particles_graph(T_FINAL):
 
     # Affichez le graphique
     plt.savefig(f"{FILEPATH}/graph/{title}.jpg")
+    plt.clf()
 
 
 n = 10
 number_particles = 5000
 time = 2
 
-mpi_graph(n, number_particles, time)
-openmp_graph(n, number_particles, time)
-evolution_t_graph(1000)
-evolution_nb_particles_graph(2)
+# mpi_graph(n, 1, number_particles, time)
+# mpi_graph(n, 20, number_particles, time)
+# openmp_graph(n, number_particles, time)
+# evolution_t_graph(1000)
+# evolution_nb_particles_graph(2)
 bar_graph()

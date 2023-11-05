@@ -102,6 +102,7 @@ void all_move_particles(double step, int comm_size, int comm_rank, MPI_Datatype 
 
     //MPI : while we calculate the force the particles aren't moving, work can be separated
     int i;
+#pragma omp parallel for default(none) shared(particles, nparticles, local_particles, nparticles_per_process)
     for (i = 0; i < nparticles_per_process; i++) {
         int j;
         local_particles[i].x_force = 0;
@@ -192,12 +193,20 @@ void run_simulation(int comm_size, int comm_rank, MPI_Datatype MPI_PARTICLE_T) {
   Simulate the movement of nparticles particles.
 */
 int main(int argc, char **argv) {
+    int OMP_NUM_THREADS = 1;
+
     if (argc >= 2) {
         nparticles = atoi(argv[1]);
     }
     if (argc >= 3) {
         T_FINAL = atof(argv[2]);
     }
+    if (argc == 4) {
+        OMP_NUM_THREADS = atof(argv[3]);
+    }
+
+    omp_set_num_threads(OMP_NUM_THREADS);
+
 
     MPI_Init(&argc, &argv);
 
