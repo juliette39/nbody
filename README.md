@@ -34,7 +34,7 @@ Run on different machines
 
 3. Run the project on all the machines
     ```bash
-    mpirun -np 3 -hostfile ./hosts ./nbody_brute_force 1000 2 1 # run
+    mpirun -np 3 -hostfile ./hosts ./nbody_brute_force 1000 2 # run
     ```
 
 ## CUDA
