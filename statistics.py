@@ -206,9 +206,9 @@ n = 10
 number_particles = 5000
 time = 2
 
-# mpi_graph(n, 1, number_particles, time)
-# mpi_graph(n, 20, number_particles, time)
-# openmp_graph(n, number_particles, time)
-# evolution_t_graph(1000)
-# evolution_nb_particles_graph(2)
+mpi_graph(n, 1, number_particles, time)
+mpi_graph(n, 20, number_particles, time)
+openmp_graph(n, number_particles, time)
+evolution_t_graph(1000)
+evolution_nb_particles_graph(2)
 bar_graph()
