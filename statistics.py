@@ -131,7 +131,7 @@ def bar_graph(coeur):
     data_sequential = []
     data_openmp = []
     data_mpi = []
-    data_cuda = [4.721920, 14.052495, 11.095877, 22.028955, 28.343530]
+    data_cuda = [4.178279, 12.758548, 9.293374, 18.270145, 23.828161]
     legende = []
     n = 5
     for i in range(len(values)):
@@ -171,20 +171,21 @@ def bar_graph(coeur):
 
 
 def evolution_t_graph(nb_particles, coeur):
-    title = f"NBody Force Brute les 3 méthodes avec n_particle = {nb_particles}"
+    title = f"NBody Force Brute les 3 méthodes avec n_particles = {nb_particles}"
 
     data_sequential = []
     data_openmp = []
     data_mpi = []
-    data_cuda = [2.297745, 4.279224, 6.238240, 8.506100, 10.356476, 12.732869, 14.744954, 16.276171, 18.448729, 21.032212]
+    data_cuda = [2.151075, 3.984043, 5.810516, 7.831068, 9.059130, 11.160149, 12.892105, 14.870889, 16.352423, 18.021320]
+
     t_finals = range(1, 11)
-    n = 5
+    n = 10
     for t in t_finals:
         T_FINAL = t
         sequential_time = get_duration(sequential_args(nb_particles, T_FINAL))
 
         data_sequential.append(sequential_time)
-        data_openmp.append(get_duration(openmp_args(nb_particles, T_FINAL, n)))
+        data_openmp.append(get_duration(openmp_args(nb_particles, T_FINAL, coeur)))
         data_mpi.append(get_duration(mpi_args(nb_particles, T_FINAL, n, coeur)))
         data_cuda[t-1] = data_cuda[t-1]
 
@@ -212,13 +213,14 @@ def evolution_nb_particles_graph(T_FINAL, coeur):
     data_sequential = []
     data_openmp = []
     data_mpi = []
-    data_cuda = [4.671451, 13.238847, 24.246035, 37.037894, 49.437910]
+    data_cuda = [4.117001, 12.752132, 22.066512, 32.404332, 46.290168]
+
     nb_particles_range = range(1000, 6000, 1000)
-    n = 5
+    n = 10
     for nb_particles in nb_particles_range:
         sequential_time = get_duration(sequential_args(nb_particles, T_FINAL))
         data_sequential.append(sequential_time)
-        data_openmp.append(get_duration(openmp_args(nb_particles, T_FINAL, n)))
+        data_openmp.append(get_duration(openmp_args(nb_particles, T_FINAL, coeur)))
         data_mpi.append(get_duration(mpi_args(nb_particles, T_FINAL, n, coeur)))
         data_cuda[(nb_particles//1000)-1] = data_cuda[(nb_particles//1000)-1]
 
@@ -242,11 +244,11 @@ def evolution_nb_particles_graph(T_FINAL, coeur):
 
 host = 10
 coeur = os.cpu_count()
-number_particles = 2000
+number_particles = 5000
 time = 2
 
-mpi_graph(host, coeur, number_particles, time)
-openmp_graph(coeur, number_particles, time)
+# mpi_graph(host, coeur, number_particles, time)
+# openmp_graph(coeur, number_particles, time)
 evolution_t_graph(1000, coeur)
 evolution_nb_particles_graph(2, coeur)
 bar_graph(coeur)
