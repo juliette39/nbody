@@ -58,7 +58,7 @@ def openmp_graph(n, nb_particles, T_FINAL):
 
     plt.xlabel('Nb de threads')
     plt.ylabel('Temps (s)')
-    plt.title(f'NBody Force Brute OpenMP {nb_particles} {T_FINAL}')
+    plt.title(f'NBody Force Brute OpenMP n = {nb_particles} T = {T_FINAL}')
     plt.legend(loc='center left', bbox_to_anchor=(1, 0.5), fontsize='small')
     plt.subplots_adjust(right=0.82)
 
@@ -102,7 +102,7 @@ def mpi_graph(n, openmp_n, nb_particles, T_FINAL):
     x = list(range(1, len(data_1) + 1))
 
     plt.plot(x, data_1, marker='o', linestyle='-', label='MPI sans OpenMP', color='red')
-    plt.plot(x, data_n, marker='o', linestyle='-', label='MPI avec OpenMP\n20 threads', color='purple')
+    plt.plot(x, data_n, marker='o', linestyle='-', label=f'MPI avec OpenMP\n{openmp_n} threads', color='purple')
     plt.plot(x, data_sequentiel, marker='o', linestyle='-', label='Séquentiel', color='blue')
 
     # Définissez les graduations personnalisées pour les axes x et y
@@ -112,7 +112,7 @@ def mpi_graph(n, openmp_n, nb_particles, T_FINAL):
 
     plt.xlabel("Nombre de machines")
     plt.ylabel('Temps (s)')
-    plt.title(f'NBody Force Brute MPI {nb_particles} {T_FINAL}')
+    plt.title(f'NBody Force Brute MPI n = {nb_particles} T = {T_FINAL}')
     plt.legend(loc='center left', bbox_to_anchor=(1, 0.5), fontsize='small')
     plt.subplots_adjust(right=0.75)
 
@@ -124,7 +124,7 @@ def sequential_args(nb_particles, T_FINAL):
     return [f'{FILEPATH}/sequential/nbody_brute_force', str(nb_particles), str(T_FINAL)]
 
 
-def bar_graph():
+def bar_graph(coeur):
     title = "NBody Force Brute accélération des 3 méthodes"
     values = [(1000, 2), (2000, 2), (1000, 5), (1000, 10), (5000, 1)]
 
@@ -140,7 +140,7 @@ def bar_graph():
 
         data_sequential.append((sequential_time/sequential_time) * 100)
         data_openmp.append((get_duration(openmp_args(nb_particles, T_FINAL, n))/sequential_time) * 100)
-        data_mpi.append((get_duration(mpi_args(nb_particles, T_FINAL, n, 20))/sequential_time) * 100)
+        data_mpi.append((get_duration(mpi_args(nb_particles, T_FINAL, n, coeur))/sequential_time) * 100)
         data_cuda[i] = data_cuda[i]/sequential_time * 100
 
         legende.append(f"({nb_particles}, {T_FINAL})")
@@ -170,7 +170,7 @@ def bar_graph():
     plt.clf()
 
 
-def evolution_t_graph(nb_particles):
+def evolution_t_graph(nb_particles, coeur):
     title = f"NBody Force Brute les 3 méthodes avec n_particle = {nb_particles}"
 
     data_sequential = []
@@ -185,7 +185,7 @@ def evolution_t_graph(nb_particles):
 
         data_sequential.append(sequential_time)
         data_openmp.append(get_duration(openmp_args(nb_particles, T_FINAL, n)))
-        data_mpi.append(get_duration(mpi_args(nb_particles, T_FINAL, n, 20)))
+        data_mpi.append(get_duration(mpi_args(nb_particles, T_FINAL, n, coeur)))
         data_cuda[t-1] = data_cuda[t-1]
 
     # Créez le graphique en barres
@@ -206,7 +206,7 @@ def evolution_t_graph(nb_particles):
     plt.clf()
 
 
-def evolution_nb_particles_graph(T_FINAL):
+def evolution_nb_particles_graph(T_FINAL, coeur):
     title = f"NBody Force Brute les 3 méthodes avec T_FINAL = {T_FINAL}"
 
     data_sequential = []
@@ -219,7 +219,7 @@ def evolution_nb_particles_graph(T_FINAL):
         sequential_time = get_duration(sequential_args(nb_particles, T_FINAL))
         data_sequential.append(sequential_time)
         data_openmp.append(get_duration(openmp_args(nb_particles, T_FINAL, n)))
-        data_mpi.append(get_duration(mpi_args(nb_particles, T_FINAL, n, 20)))
+        data_mpi.append(get_duration(mpi_args(nb_particles, T_FINAL, n, coeur)))
         data_cuda[(nb_particles//1000)-1] = data_cuda[(nb_particles//1000)-1]
 
     # Créez le graphique en barres
@@ -240,12 +240,13 @@ def evolution_nb_particles_graph(T_FINAL):
     plt.clf()
 
 
-n = 10
+host = 10
+coeur = os.cpu_count()
 number_particles = 2000
 time = 2
 
-mpi_graph(n, 20, number_particles, time)
-openmp_graph(n, number_particles, time)
-# evolution_t_graph(1000)
-# evolution_nb_particles_graph(2)
-# bar_graph()
+mpi_graph(host, coeur, number_particles, time)
+openmp_graph(coeur, number_particles, time)
+evolution_t_graph(1000, coeur)
+evolution_nb_particles_graph(2, coeur)
+bar_graph(coeur)
