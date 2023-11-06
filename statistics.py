@@ -248,7 +248,7 @@ number_particles = 5000
 time = 2
 
 # mpi_graph(host, coeur, number_particles, time)
-# openmp_graph(coeur, number_particles, time)
-evolution_t_graph(1000, coeur)
-evolution_nb_particles_graph(2, coeur)
-bar_graph(coeur)
+openmp_graph(coeur, number_particles, time)
+# evolution_t_graph(1000, coeur)
+# evolution_nb_particles_graph(2, coeur)
+# bar_graph(coeur)
