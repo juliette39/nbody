@@ -1,5 +1,7 @@
 import os
 import subprocess
+import matplotlib
+matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import numpy as np
 
@@ -39,8 +41,30 @@ def openmp_args(nb_particles, T_FINAL, i):
 
 def openmp_graph(n, nb_particles, T_FINAL):
     data = openmp(n, nb_particles, T_FINAL)
+    data_sequentiel = [get_duration(sequential_args(nb_particles, T_FINAL))] * n
     print(data)
-    create_graph("OpenMP", data, nb_particles, T_FINAL)
+    print(data_sequentiel)
+    x = list(range(1, len(data) + 1))
+
+    print(x)
+
+    plt.plot(x, data, marker='o', linestyle='-', label='OpenMP', color='green')
+    plt.plot(x, data_sequentiel, marker='o', linestyle='-', label='Séquentiel', color='blue')
+
+    # Définissez les graduations personnalisées pour les axes x et y
+    x_ticks = [i for i in range(1, n + 1)]
+    # Utilisez xticks et yticks pour définir les graduations
+    plt.xticks(x_ticks)
+
+    plt.xlabel('Nb de threads')
+    plt.ylabel('Temps (s)')
+    plt.title(f'NBody Force Brute OpenMP {nb_particles} {T_FINAL}')
+    plt.legend(loc='center left', bbox_to_anchor=(1, 0.5), fontsize='small')
+    plt.subplots_adjust(right=0.82)
+
+    # plt.autoscale(False)
+    plt.savefig(f'{FILEPATH}/graph/NBody Force Brute OpenMP {nb_particles} {T_FINAL}.jpg')
+    plt.clf()
 
 
 def mpi(n, openmp_n, nb_particles, T_FINAL):
@@ -52,34 +76,48 @@ def mpi(n, openmp_n, nb_particles, T_FINAL):
 
 
 def mpi_args(nb_particles, T_FINAL, i, openmp_n):
-    return ['mpirun', '-np', str(i), '-hostfile', f'{FILEPATH}/mpi/hosts',
+    return ['mpirun', '-np', str(i), '-hostfile', f'{FILEPATH}/mpi/hosts_2',
             f'{FILEPATH}/mpi/nbody_brute_force', str(nb_particles), str(T_FINAL), str(openmp_n)]
+
+def sequentiel(n, nb_particles, T_FINAL):
+    data = []
+    for i in range(n):
+        data.append(get_duration(sequential_args(nb_particles, T_FINAL)))
+    return data
 
 
 def mpi_graph(n, openmp_n, nb_particles, T_FINAL):
-    data = mpi(n, openmp_n, nb_particles, T_FINAL)
-    print(data)
-    create_graph(f"MPI openMP: {openmp_n}", data, nb_particles, T_FINAL)
+    data_1 = mpi(n, 1, nb_particles, T_FINAL)
+    data_n = mpi(n, openmp_n, nb_particles, T_FINAL)
+    data_sequentiel = [get_duration(sequential_args(nb_particles, T_FINAL))] * n
 
+    # data_1 = [19.169321, 10.651778, 8.201374, 6.771136, 6.328926, 5.752534, 5.530823, 5.086228, 5.747662, 5.451276]
+    # data_n = [4.811567, 4.079158, 4.849799, 4.346784, 4.559994, 4.341067, 4.226174, 4.078246, 4.934475, 5.188528]
+    # data_sequentiel = [18.739791, 18.739791, 18.739791, 18.739791, 18.739791, 18.739791, 18.739791, 18.739791, 18.739791, 18.739791]
 
-def create_graph(algo, data, nb_particles, T_FINAL):
-    x = list(range(1, len(data) + 1))
+    print(data_1)
+    print(data_n)
+    print(data_sequentiel)
 
-    print(x)
+    x = list(range(1, len(data_1) + 1))
 
-    plt.plot(x, data, marker='o', linestyle='-')
+    plt.plot(x, data_1, marker='o', linestyle='-', label='MPI sans OpenMP', color='red')
+    plt.plot(x, data_n, marker='o', linestyle='-', label='MPI avec OpenMP\n20 threads', color='purple')
+    plt.plot(x, data_sequentiel, marker='o', linestyle='-', label='Séquentiel', color='blue')
 
     # Définissez les graduations personnalisées pour les axes x et y
     x_ticks = [i for i in range(1, n + 1)]
     # Utilisez xticks et yticks pour définir les graduations
     plt.xticks(x_ticks)
 
-    plt.xlabel('Nb de processus')
+    plt.xlabel("Nombre de machines")
     plt.ylabel('Temps (s)')
-    plt.title(f'NBody Force Brute {algo} {nb_particles} {T_FINAL}')
+    plt.title(f'NBody Force Brute MPI {nb_particles} {T_FINAL}')
+    plt.legend(loc='center left', bbox_to_anchor=(1, 0.5), fontsize='small')
+    plt.subplots_adjust(right=0.75)
 
     # plt.autoscale(False)
-    plt.savefig(f'{FILEPATH}/graph/NBody Force Brute {algo} {nb_particles} {T_FINAL}.jpg')
+    plt.savefig(f'{FILEPATH}/graph/NBody Force Brute MPI {nb_particles} {T_FINAL}.jpg')
     plt.clf()
 
 def sequential_args(nb_particles, T_FINAL):
@@ -114,7 +152,7 @@ def bar_graph():
     largeur_barre = 0.2
 
     # Créez le graphique en barres
-    plt.bar(indices, data_sequential, width=largeur_barre, label='Sequential', color='blue')
+    plt.bar(indices, data_sequential, width=largeur_barre, label='Séquentiel', color='blue')
     plt.bar(indices + largeur_barre, data_openmp, width=largeur_barre, label='OpenMP', color='green')
     plt.bar(indices + 2 * largeur_barre, data_mpi, width=largeur_barre, label='MPI', color='red')
     plt.bar(indices + 3 * largeur_barre, data_cuda, width=largeur_barre, label='CUDA', color='orange')
@@ -151,7 +189,7 @@ def evolution_t_graph(nb_particles):
         data_cuda[t-1] = data_cuda[t-1]
 
     # Créez le graphique en barres
-    plt.scatter(t_finals, data_sequential, label='Sequential', color='blue')
+    plt.scatter(t_finals, data_sequential, label='Séquentiel', color='blue')
     plt.scatter(t_finals, data_openmp, label='OpenMP', color='green')
     plt.scatter(t_finals, data_mpi, label='MPI', color='red')
     plt.scatter(t_finals, data_cuda, label='CUDA', color='orange')
@@ -185,7 +223,7 @@ def evolution_nb_particles_graph(T_FINAL):
         data_cuda[(nb_particles//1000)-1] = data_cuda[(nb_particles//1000)-1]
 
     # Créez le graphique en barres
-    plt.scatter(nb_particles_range, data_sequential, label='Sequential', color='blue')
+    plt.scatter(nb_particles_range, data_sequential, label='Séquentiel', color='blue')
     plt.scatter(nb_particles_range, data_openmp, label='OpenMP', color='green')
     plt.scatter(nb_particles_range, data_mpi, label='MPI', color='red')
     plt.scatter(nb_particles_range, data_cuda, label='CUDA', color='orange')
@@ -203,12 +241,11 @@ def evolution_nb_particles_graph(T_FINAL):
 
 
 n = 10
-number_particles = 5000
+number_particles = 2000
 time = 2
 
-mpi_graph(n, 1, number_particles, time)
 mpi_graph(n, 20, number_particles, time)
 openmp_graph(n, number_particles, time)
-evolution_t_graph(1000)
-evolution_nb_particles_graph(2)
-bar_graph()
+# evolution_t_graph(1000)
+# evolution_nb_particles_graph(2)
+# bar_graph()

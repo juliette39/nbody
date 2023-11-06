@@ -207,7 +207,6 @@ int main(int argc, char **argv) {
 
     omp_set_num_threads(OMP_NUM_THREADS);
 
-
     MPI_Init(&argc, &argv);
 
     int comm_size;

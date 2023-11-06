@@ -1,4 +1,3 @@
-
 /*
 ** nbody_brute_force.c - nbody simulation using the brute-force algorithm (O(n*n))
 **
@@ -38,8 +37,6 @@ void init() {
     /* Nothing to do */
 }
 
-
-
 /*
   Place particles in their initial positions.
 */
@@ -69,46 +66,29 @@ void all_init_particles(int num_particles, particle_t *particles) {
     }
 }
 
-__device__ double atomicAddDouble(double* address, double val)
-{
-    unsigned long long int* address_as_ull =
-                             (unsigned long long int*)address;
-    unsigned long long int old = *address_as_ull, assumed;
-    do {
-        assumed = old;
-old = atomicCAS(address_as_ull, assumed,
-                        __double_as_longlong(val +
-                               __longlong_as_double(assumed)));
-    } while (assumed != old);
-    return __longlong_as_double(old);
-}
+
 
 __global__ void computeForcesKernel(particle_t *particles, int numParticles, double grav) {
     int i = blockIdx.x * blockDim.x + threadIdx.x;
-    int j = blockIdx.y * blockDim.y + threadIdx.y;
+    int j;
+    for (j = 0; j < numParticles; j ++) {
 
-    if (i < numParticles && j < numParticles) {
+        particle_t *p = &particles[j];
 
-        // Compute the force of particle j on particle i
+        //compute the force of particle j on particle i
         double x_sep, y_sep, dist_sq, grav_base;
 
-        x_sep = particles[j].x_pos - particles[i].x_pos;
-        y_sep = particles[j].y_pos - particles[i].y_pos;
-        dist_sq = fmax(x_sep * x_sep + y_sep * y_sep, 0.01);
+        x_sep = p->x_pos - particles[i].x_pos;
+        y_sep = p->y_pos - particles[i].y_pos;
+        dist_sq = fmax((x_sep * x_sep) + (y_sep * y_sep), 0.01);
 
-        // Use the 2-dimensional gravity rule: F = G * (m1 * m2) / d^2
-        grav_base = grav * particles[i].mass * particles[j].mass / dist_sq;
+        //Use the 2-dimensional gravity rule: F = d * (GMm/d^2)
+        grav_base = grav * (particles[i].mass) * (p->mass) / dist_sq;
 
-        //particles[i].x_force += grav_base * x_sep;
-        //particles[i].y_force += grav_base * y_sep;
-
-
-        atomicAddDouble(&(particles[i].x_force), grav_base * x_sep);
-        atomicAddDouble(&(particles[i].y_force), grav_base * y_sep);
+        particles[i].x_force += grav_base * x_sep;
+        particles[i].y_force += grav_base * y_sep;
     }
-
 }
-
 
 /* compute the new position/velocity */
 void move_particle(particle_t *p, double step) {
@@ -143,13 +123,11 @@ void print_all_particles(FILE *f) {
 
 
 void run_simulation() {
-
-    dim3 gridDim(nparticles, nparticles);
-    dim3 blockDim(128, 1);
+    int block_size = 256;
+    int num_blocks = (nparticles + block_size - 1) / block_size;
 
     particle_t *d_particles;
     cudaMalloc((void**)&d_particles, sizeof(particle_t) * nparticles);
-
 
     double grav = 0.01;
     double t = 0.0;
@@ -166,9 +144,9 @@ void run_simulation() {
             cudaMemcpy(&d_particles[i], &particles[i], sizeof(particle_t), cudaMemcpyHostToDevice);
         }
 
+        printf("%d %d\n", num_blocks, block_size);
 
-        computeForcesKernel<<<gridDim, blockDim>>>(d_particles, nparticles, grav);
-        cudaDeviceSynchronize();
+        computeForcesKernel<<<num_blocks, block_size>>>(d_particles, nparticles, grav);
 
         // Copy the results back to the host
         for (int i = 0; i < nparticles; i++) {
@@ -176,20 +154,16 @@ void run_simulation() {
         }
 
 
-
         //then move all particles and return statistics
         for (int i = 0; i < nparticles; i++) {
             move_particle(&particles[i], dt);
         }
 
-
          /* Adjust dt based on maximum speed and acceleration--this
            simple rule tries to insure that no velocity will change
            by more than 10% */
         dt = 0.1 * max_speed / max_acc;
-
     }
-
 }
 
 /*
